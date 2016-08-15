@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -78,8 +79,17 @@ public class JedisIndex {
 	 * @return Map from URL to count.
 	 */
 	public Map<String, Integer> getCounts(String term) {
-        // FILL THIS IN!
-		return null;
+        Set<String> urls = jedis.smembers(urlSetKey(term));
+        
+        Map<String, Integer> urlToCount = new HashMap<>();
+        for (String url : urls)
+        {
+        	//get the term count
+        	String count = jedis.hget(termCounterKey(url), term);
+        	urlToCount.put(url, Integer.valueOf(count));
+        }
+        
+        return urlToCount;
 	}
 
     /**
@@ -90,8 +100,8 @@ public class JedisIndex {
 	 * @return
 	 */
 	public Integer getCount(String url, String term) {
-        // FILL THIS IN!
-		return null;
+		 String count =  jedis.hget(termCounterKey(url), term);
+		 return Integer.valueOf(count);
 	}
 
 
@@ -102,7 +112,36 @@ public class JedisIndex {
 	 * @param paragraphs  Collection of elements that should be indexed.
 	 */
 	public void indexPage(String url, Elements paragraphs) {
-        // FILL THIS IN!
+        
+        //first index the page
+		Index index = new Index ();
+		index.indexPage(url, paragraphs);
+		
+		Set<String> terms = index.keySet();
+		
+				
+		long startTime = System.currentTimeMillis();
+		
+		System.out.println ("Starting to add " + terms.size() + " terms " + url);
+		
+		Transaction tx = jedis.multi();
+		for (String term: terms)
+		{
+			//persit in redis the URL for this term
+			tx.sadd(urlSetKey(term), url);
+			Set<TermCounter> tcSet = index.get(term);
+			TermCounter tc = tcSet.iterator().next();
+			Integer count = tc.get(term);
+			
+		    tx.hset(termCounterKey(url), term, count.toString());
+			
+		}
+		
+		tx.exec();
+		
+		long timeTaken = System.currentTimeMillis() - startTime;
+		
+		System.out.println ("**finished indexing, time taken  = " + timeTaken);
 	}
 
 	/**
